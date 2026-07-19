@@ -1,0 +1,16 @@
+[project]
+name = "sv-studio"
+version = "0.2.0"
+description = "A lightweight local SystemVerilog and UVM learning IDE"
+requires-python = ">=3.10"
+dependencies = ["PySide6-Essentials>=6.7,<7"]
+
+[project.scripts]
+sv-studio = "svstudio.main:main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

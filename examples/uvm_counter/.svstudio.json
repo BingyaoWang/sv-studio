@@ -1,0 +1,19 @@
+{
+  "name": "UVM Counter Lab",
+  "top": "tb_top",
+  "test": "counter_smoke_test",
+  "simulator": "auto",
+  "sources": [
+    "rtl/counter.sv",
+    "tb/tb_top.sv"
+  ],
+  "include_dirs": [
+    "tb"
+  ],
+  "defines": [],
+  "uvm_home": "",
+  "waveform": ".svstudio/waves.vcd",
+  "plusargs": [],
+  "custom_compile": "",
+  "custom_run": ""
+}
