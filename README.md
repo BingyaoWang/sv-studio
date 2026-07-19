@@ -1,107 +1,90 @@
 # SV Studio
 
-SV Studio is a lightweight, local desktop IDE for learning SystemVerilog and
-UVM. It combines a project explorer, SystemVerilog editor, UVM-aware logs,
-source-linked problems, phase navigation, and a built-in VCD waveform viewer.
+SV Studio is a small, local desktop IDE for SystemVerilog and UVM. The visible
+workflow is intentionally limited to five things:
 
-The default toolchain is fully open source:
+- Project files
+- SystemVerilog editor
+- Run
+- Console
+- Waveform
 
-- [Verilator](https://github.com/verilator/verilator) for SystemVerilog
-  compilation and simulation.
-- [CHIPS Alliance UVM for Verilator](https://github.com/chipsalliance/uvm-verilator),
-  based on the Apache-2.0 Accellera reference implementation.
-- WSL on Windows, so no commercial simulator or license server is needed.
-- Z3 for SystemVerilog constrained randomization.
+There is no simulator selector, UVM path selector, verbosity selector, seed
+form, or custom command form. SV Studio detects whether the project is plain
+SystemVerilog or UVM and runs the best free local flow automatically.
 
-Verilator's UVM support is actively developing. The included lab intentionally
-uses the broadly working UVM subset: factory registration, phases, config DB,
-sequences, driver, monitor, analysis ports, scoreboard, objections, and reports.
-Advanced constraint randomization and some coverage features can still expose
-tool limitations.
+## What Run does
+
+For a plain SystemVerilog project, Run:
+
+1. checks the SystemVerilog sources;
+2. builds and runs the simulation;
+3. opens `.svstudio/waves.vcd` in the Waveform tab.
+
+For a UVM project, the same Run button automatically adds the project-local
+CHIPS Alliance UVM library, chooses the configured test class, creates a random
+seed, runs the test, and opens the waveform.
+
+The Console hides WSL commands, generated C++ build commands, UVM library
+boilerplate, and encoding noise. It keeps project diagnostics, UVM test output,
+scoreboard summaries, errors, fatals, and the final result.
+
+## Free local engine
+
+The default engine is fully open source and needs no commercial license:
+
+- [Verilator](https://github.com/verilator/verilator)
+- [CHIPS Alliance UVM for Verilator](https://github.com/chipsalliance/uvm-verilator)
+- Z3 constrained-random solver
+- WSL Ubuntu on Windows
+
+If the engine or project-local UVM library is missing, the first Run offers the
+one-time free setup. There are no toolchain settings to manage afterward.
 
 ## Start
 
-On Windows, double-click `run.bat`, or run:
+Use the portable Windows package, or run from source:
 
 ```powershell
 .\run.ps1
 ```
 
-The first start creates a local Python environment and installs the Qt desktop
-runtime. No files are uploaded and no browser is used.
+No browser is used and project files stay on the local machine.
 
-The IDE opens the included **UVM Counter Lab**. Press **F5** immediately to try
-the learning Demo Engine, then open **Project → Toolchains** to install the free
-Verilator + UVM toolchain for real compilation.
+## Minimal project file
 
-## Randomization and debugging
-
-Select `counter_random_test` to run a weighted `dist` constraint through
-Verilator's Z3 solver. Every run records its test, engine, verbosity, and seed.
-
-- **F5** runs normally.
-- **F6** stops on the first UVM error and saves the solver exchange to
-  `.svstudio/solver.log`.
-- **Ctrl+F5** re-runs the exact same seed.
-- The **Debug** tab copies reproduction details and opens the solver log.
-- Compiler and UVM diagnostics appear in **Problems**; double-click one to jump
-  to the source line.
-
-The red dots in the editor gutter are source bookmarks. Verilator runs as a
-compiled batch simulator, so they are intentionally not presented as live HDL
-breakpoints.
-
-## Open-source toolchain
-
-The setup needs Windows Subsystem for Linux with Ubuntu. In SV Studio:
-
-1. Open **Project → Toolchains**.
-2. Click **Set Up Free Toolchain**.
-3. Wait for the terminal to report `Complete`.
-4. Click **Refresh Status**, save, and press **F5**.
-
-The setup builds Verilator under `~/.local/sv-studio` inside WSL and clones the
-UVM library into the current project under `tools/uvm-verilator`.
-
-## Project file
-
-Each workspace uses a `.svstudio.json` file:
+SV Studio maintains a small `.svstudio.json` file internally:
 
 ```json
 {
-  "name": "My UVM Project",
+  "name": "My Project",
   "top": "tb_top",
-  "test": "smoke_test",
-  "simulator": "auto",
+  "test": "my_test",
   "sources": ["rtl/**/*.sv", "tb/tb_top.sv"],
   "include_dirs": ["tb"],
-  "uvm_home": "",
   "waveform": ".svstudio/waves.vcd"
 }
 ```
 
-For predictable compilation order, use an explicit top-level testbench that
-`include`s its UVM class files, as shown in `examples/uvm_counter/tb/tb_top.sv`.
+Ordinary SystemVerilog projects may leave `test` empty. UVM projects normally
+use one top-level testbench that includes the class files in compilation order.
 
-## Keyboard shortcuts
+## Shortcuts
 
 | Shortcut | Action |
 | --- | --- |
-| `F5` | Run the selected UVM test |
-| `F6` | Debug and stop on the first UVM error |
-| `Ctrl+F5` | Re-run the previous seed |
-| `Shift+F5` | Stop the active build or simulation |
-| `Ctrl+S` | Save the active file |
-| `Ctrl+Alt+S` | Save all files |
-| `Ctrl+F` | Find in the active file |
-| `F8` | Refresh the project explorer |
+| `F5` | Run SystemVerilog or UVM automatically |
+| `Shift+F5` | Stop |
+| `Ctrl+S` | Save |
+| `Ctrl+Alt+S` | Save all |
+| `Ctrl+F` | Find |
 
-## Build a Windows package
+## Build the Windows package
 
 ```powershell
-.\tools\build_windows.ps1
+.\tools\build_windows.ps1 -Version "0.3.0"
 ```
 
-The portable zip is written to `dist/SVStudio-Windows-x64-v0.2.0.zip`. GitHub
-Actions runs the tests and builds the same package on every push; tags matching
-`v*` also create a GitHub Release and attach the zip automatically.
+The portable archive is written to
+`dist/SVStudio-Windows-x64-v0.3.0.zip`. GitHub Actions runs the tests and builds
+the package on every push; version tags publish the archive as a GitHub Release.

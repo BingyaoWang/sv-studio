@@ -1,9 +1,9 @@
 {
-  "name": "UVM Counter Lab",
+  "name": "SystemVerilog Starter",
   "top": "tb_top",
-  "test": "counter_smoke_test",
+  "test": "",
   "sources": [
-    "rtl/counter.sv",
+    "rtl/design.sv",
     "tb/tb_top.sv"
   ],
   "include_dirs": [

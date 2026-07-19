@@ -324,9 +324,9 @@ class MainWindow(QMainWindow):
         self._last_seed: int | None = None
         self._debug_mode = False
         self._run_started = 0.0
-        self.setWindowTitle(f"SV Studio — {self.config.name}")
-        self.setMinimumSize(1120, 720)
-        self.resize(1480, 920)
+        self.setWindowTitle(f"SV Studio - {self.config.name}")
+        self.setMinimumSize(960, 640)
+        self.resize(1320, 820)
         self.setStyleSheet(APP_STYLESHEET)
         self._build_actions()
         self._build_menu()
@@ -340,30 +340,21 @@ class MainWindow(QMainWindow):
         self._open_start_file()
 
     def _build_actions(self) -> None:
-        self.action_open_folder = QAction("Open Folder…", self, shortcut=QKeySequence.StandardKey.Open)
+        self.action_open_folder = QAction("Open Folder...", self, shortcut=QKeySequence.StandardKey.Open)
         self.action_open_folder.triggered.connect(self.open_folder)
-        self.action_new_project = QAction("New Project…", self, shortcut="Ctrl+Shift+N")
+        self.action_new_project = QAction("New Project...", self, shortcut="Ctrl+Shift+N")
         self.action_new_project.triggered.connect(self.new_project)
         self.action_save = QAction("Save", self, shortcut=QKeySequence.StandardKey.Save)
         self.action_save.triggered.connect(self.save_current)
         self.action_save_all = QAction("Save All", self, shortcut="Ctrl+Alt+S")
         self.action_save_all.triggered.connect(self.save_all)
-        self.action_find = QAction("Find…", self, shortcut=QKeySequence.StandardKey.Find)
+        self.action_find = QAction("Find...", self, shortcut=QKeySequence.StandardKey.Find)
         self.action_find.triggered.connect(self.find_text)
-        self.action_run = QAction("Run UVM Test", self, shortcut="F5")
+        self.action_run = QAction("Run", self, shortcut="F5")
         self.action_run.triggered.connect(self.run_test)
-        self.action_debug = QAction("Debug UVM Test", self, shortcut="F6")
-        self.action_debug.triggered.connect(self.debug_test)
-        self.action_rerun = QAction("Re-run Last Seed", self, shortcut="Ctrl+F5")
-        self.action_rerun.setEnabled(False)
-        self.action_rerun.triggered.connect(self.rerun_last_seed)
         self.action_stop = QAction("Stop", self, shortcut="Shift+F5")
         self.action_stop.setEnabled(False)
         self.action_stop.triggered.connect(self.stop_test)
-        self.action_toolchains = QAction("Toolchains…", self)
-        self.action_toolchains.triggered.connect(self.open_toolchains)
-        self.action_open_vcd = QAction("Open VCD…", self)
-        self.action_open_vcd.triggered.connect(self.open_vcd)
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("File")
@@ -379,47 +370,28 @@ class MainWindow(QMainWindow):
         edit_menu.addAction("Redo", lambda: self.current_editor() and self.current_editor().redo(), QKeySequence.StandardKey.Redo)
         edit_menu.addSeparator()
         edit_menu.addAction(self.action_find)
-        project_menu = self.menuBar().addMenu("Project")
-        project_menu.addAction("Refresh Explorer", self.refresh_project_tree, "F8")
-        project_menu.addAction(self.action_toolchains)
         run_menu = self.menuBar().addMenu("Run")
         run_menu.addAction(self.action_run)
-        run_menu.addAction(self.action_debug)
-        run_menu.addAction(self.action_rerun)
         run_menu.addAction(self.action_stop)
-        run_menu.addAction(self.action_open_vcd)
         help_menu = self.menuBar().addMenu("Help")
-        help_menu.addAction("Open-source UVM Guide", self.show_uvm_guide)
         help_menu.addAction("About SV Studio", self.show_about)
 
     def _build_toolbar(self) -> None:
         toolbar = QToolBar("Main")
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
-        brand = QLabel("  ◇  SV STUDIO  ")
+        brand = QLabel("  SV STUDIO  ")
         brand.setObjectName("brand")
         toolbar.addWidget(brand)
         toolbar.addSeparator()
+        toolbar.addAction(self.action_open_folder)
         toolbar.addAction(self.action_save)
         toolbar.addAction(self.action_run)
-        toolbar.addAction(self.action_debug)
-        toolbar.addAction(self.action_rerun)
         toolbar.addAction(self.action_stop)
         toolbar.addSeparator()
-        engine_label = QLabel("  Engine  ")
-        engine_label.setObjectName("muted")
-        toolbar.addWidget(engine_label)
-        self.engine_combo = QComboBox()
-        self.engine_combo.setMinimumWidth(210)
-        self.engine_combo.addItem("Auto-detect open source", "auto")
-        for chain in detect_toolchains():
-            self.engine_combo.addItem(chain.label, chain.key)
-        index = self.engine_combo.findData(self.config.simulator)
-        self.engine_combo.setCurrentIndex(max(0, index))
-        self.engine_combo.currentIndexChanged.connect(self._engine_changed)
-        toolbar.addWidget(self.engine_combo)
-        toolbar.addSeparator()
-        toolbar.addAction(self.action_toolchains)
+        automatic = QLabel("SystemVerilog / UVM - automatic")
+        automatic.setObjectName("muted")
+        toolbar.addWidget(automatic)
 
     def _build_workspace(self) -> None:
         vertical = QSplitter(Qt.Orientation.Vertical)
@@ -431,8 +403,7 @@ class MainWindow(QMainWindow):
         self.editor_tabs.tabCloseRequested.connect(self.close_editor)
         self.editor_tabs.currentChanged.connect(self._editor_changed)
         top.addWidget(self.editor_tabs)
-        top.addWidget(self._build_inspector())
-        top.setSizes([245, 900, 275])
+        top.setSizes([240, 1080])
         top.setStretchFactor(1, 1)
         vertical.addWidget(top)
 
@@ -442,19 +413,6 @@ class MainWindow(QMainWindow):
         self.console.setFont(QFont("Cascadia Code", 9))
         self.console.setPlaceholderText("Build and simulation output will appear here")
         self.bottom_tabs.addTab(self.console, "Console")
-        self.uvm_log = UvmLogPanel()
-        self.bottom_tabs.addTab(self.uvm_log, "UVM Log")
-        self.problems = QTableWidget(0, 3)
-        self.problems.setHorizontalHeaderLabels(["Severity", "Location", "Message"])
-        self.problems.horizontalHeader().setStretchLastSection(True)
-        self.problems.setColumnWidth(0, 90)
-        self.problems.setColumnWidth(1, 280)
-        self.problems.cellDoubleClicked.connect(self._open_problem)
-        self.bottom_tabs.addTab(self.problems, "Problems")
-        self.debug_panel = DebugPanel()
-        self.debug_panel.rerun_requested.connect(self.rerun_last_seed)
-        self.debug_panel.open_solver_requested.connect(self.open_solver_log)
-        self.bottom_tabs.addTab(self.debug_panel, "Debug")
         self.waveform = WaveformPanel()
         self.bottom_tabs.addTab(self.waveform, "Waveform")
         vertical.addWidget(self.bottom_tabs)
@@ -471,8 +429,8 @@ class MainWindow(QMainWindow):
         title.setObjectName("sectionTitle")
         header.addWidget(title)
         header.addStretch()
-        refresh = QPushButton("↻")
-        refresh.setFixedSize(27, 27)
+        refresh = QPushButton("Refresh")
+        refresh.setFixedSize(62, 27)
         refresh.setToolTip("Refresh files")
         refresh.clicked.connect(self.refresh_project_tree)
         header.addWidget(refresh)
@@ -585,7 +543,7 @@ class MainWindow(QMainWindow):
     def _build_statusbar(self) -> None:
         self.status_message = QLabel("Ready")
         self.statusBar().addWidget(self.status_message, 1)
-        self.cursor_status = QLabel("Ln 1, Col 1   ·   SystemVerilog")
+        self.cursor_status = QLabel("Ln 1, Col 1 - SystemVerilog")
         self.statusBar().addPermanentWidget(self.cursor_status)
 
     def _restore_window(self) -> None:
@@ -650,12 +608,12 @@ class MainWindow(QMainWindow):
         selected = Path(item.data(0, Qt.ItemDataRole.UserRole)) if item else self.project_root
         base = selected if selected.is_dir() else selected.parent
         menu = QMenu(self)
-        menu.addAction("New SystemVerilog File…", lambda: self._new_path(base, False, ".sv"))
-        menu.addAction("New Folder…", lambda: self._new_path(base, True))
+        menu.addAction("New SystemVerilog File...", lambda: self._new_path(base, False, ".sv"))
+        menu.addAction("New Folder...", lambda: self._new_path(base, True))
         if selected != self.project_root:
             menu.addSeparator()
-            menu.addAction("Rename…", lambda: self._rename_path(selected))
-            menu.addAction("Delete…", lambda: self._delete_path(selected))
+            menu.addAction("Rename...", lambda: self._rename_path(selected))
+            menu.addAction("Delete...", lambda: self._delete_path(selected))
         menu.exec(self.project_tree.viewport().mapToGlobal(position))
 
     def _new_path(self, base: Path, folder: bool, suffix: str = "") -> None:
@@ -793,7 +751,7 @@ class MainWindow(QMainWindow):
     def _modified(self, editor: CodeEditor, modified: bool) -> None:
         index = self.editor_tabs.indexOf(editor)
         if index >= 0:
-            self.editor_tabs.setTabText(index, editor.path.name + (" •" if modified else ""))
+            self.editor_tabs.setTabText(index, editor.path.name + (" *" if modified else ""))
 
     def _editor_changed(self) -> None:
         self._update_cursor_status()
@@ -804,7 +762,7 @@ class MainWindow(QMainWindow):
             cursor = editor.textCursor()
             relative = editor.path.relative_to(self.project_root) if editor.path.is_relative_to(self.project_root) else editor.path
             self.cursor_status.setText(
-                f"{relative}   ·   Ln {cursor.blockNumber() + 1}, Col {cursor.columnNumber() + 1}   ·   SystemVerilog"
+                f"{relative} - Ln {cursor.blockNumber() + 1}, Col {cursor.columnNumber() + 1} - SystemVerilog"
             )
 
     def find_text(self) -> None:
@@ -817,7 +775,7 @@ class MainWindow(QMainWindow):
             cursor.movePosition(QTextCursor.MoveOperation.Start)
             editor.setTextCursor(cursor)
             if not editor.find(text):
-                self.status_message.setText(f"No match for “{text}”")
+                self.status_message.setText(f'No match for "{text}"')
 
     def _discover_tests(self) -> None:
         tests = set()
@@ -835,140 +793,120 @@ class MainWindow(QMainWindow):
                 pass
         if not tests:
             tests.add(self.config.test)
-        self.test_combo.clear()
-        self.test_combo.addItems(sorted(tests))
-        self.test_combo.setCurrentText(self.config.test)
+        if self.config.test not in tests:
+            learning_tests = sorted(name for name in tests if name.endswith("learning_test"))
+            self.config.test = learning_tests[0] if learning_tests else sorted(tests)[0]
 
     def _engine_changed(self) -> None:
-        self.config.simulator = self.engine_combo.currentData()
+        self.config.simulator = "auto"
         self.config.save(self.project_root)
         self._update_engine_status()
 
     def _update_engine_status(self) -> None:
-        engine = choose_toolchain(self.config.simulator)
-        self.engine_badge.setText(("●  " if engine.ready and engine.key != "demo" else "◐  ") + engine.label)
-        self.engine_badge.setObjectName("successBadge" if engine.ready and engine.key != "demo" else "demoBadge")
-        self.engine_badge.style().unpolish(self.engine_badge)
-        self.engine_badge.style().polish(self.engine_badge)
-        self.status_message.setText(
-            f"Ready · {engine.label}" if engine.key != "demo" else "Demo engine active · free Verilator setup available"
-        )
+        engine = choose_toolchain("auto")
+        self.status_message.setText("Ready" if engine.ready else "Free engine setup required")
 
     def run_test(self) -> None:
-        self._start_test(debug=False, reuse_seed=False)
+        self._start_test()
 
     def debug_test(self) -> None:
-        self._start_test(debug=True, reuse_seed=False)
+        self._start_test()
 
     def rerun_last_seed(self) -> None:
-        if self._last_seed is None:
-            self.status_message.setText("No previous seed is available yet")
-            return
-        self.seed.setValue(self._last_seed)
-        self._start_test(debug=self._debug_mode, reuse_seed=True)
+        self._start_test(reuse_seed=True)
 
-    def _start_test(self, debug: bool, reuse_seed: bool) -> None:
+    def _start_test(self, reuse_seed: bool = False) -> None:
         if self.worker and self.worker.isRunning():
             return
         self.save_all()
-        self.config.test = self.test_combo.currentText().strip() or self.config.test
-        self.config.simulator = self.engine_combo.currentData()
-        run_seed = self._last_seed if reuse_seed and self._last_seed is not None else self.seed.value()
-        self.seed.setValue(run_seed)
+        self._discover_tests()
+        self.config.simulator = "auto"
+        run_seed = self._last_seed if reuse_seed and self._last_seed is not None else random.randint(1, 2_147_483_647)
         self._last_seed = run_seed
-        self._debug_mode = debug
-        extra = self.extra_args.text().split()
         self.config.plusargs = [
-            f"+UVM_VERBOSITY={self.verbosity.currentText()}",
+            "+UVM_VERBOSITY=UVM_MEDIUM",
+            "+UVM_NO_RELNOTES",
             f"+verilator+seed+{run_seed}",
-            *extra,
         ]
-        if debug:
-            self.config.plusargs.extend(
-                [
-                    "+UVM_MAX_QUIT_COUNT=1,NO",
-                    "+verilator+solver+file+.svstudio/solver.log",
-                ]
-            )
         self.config.save(self.project_root)
         try:
             plan = build_plan(self.config, self.project_root)
         except RunnerError as error:
-            answer = QMessageBox.warning(
-                self,
-                "Toolchain not ready",
-                f"{error}\n\nOpen the free toolchain setup now?",
-                QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Cancel,
-            )
-            if answer == QMessageBox.StandardButton.Open:
-                self.open_toolchains()
+            if "not installed" in str(error) or "not ready" in str(error):
+                answer = QMessageBox.question(
+                    self,
+                    "Free engine setup",
+                    "SV Studio needs its free local Verilator/UVM engine. Install it now?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+                )
+                if answer == QMessageBox.StandardButton.Yes:
+                    self._start_free_engine_setup()
+            else:
+                QMessageBox.warning(self, "Run unavailable", str(error))
             return
         self.console.clear()
-        self.uvm_log.clear()
-        self.problems.setRowCount(0)
-        self.bottom_tabs.setTabText(2, "Problems")
-        self._problem_keys.clear()
         self.bottom_tabs.setCurrentIndex(0)
-        self._reset_phases()
         self.action_run.setEnabled(False)
-        self.action_debug.setEnabled(False)
-        self.action_rerun.setEnabled(False)
         self.action_stop.setEnabled(True)
         self._run_started = time.monotonic()
-        self.debug_panel.start_run(
-            self.config.test,
-            run_seed,
-            plan.engine.label,
-            debug,
-            self.verbosity.currentText(),
-        )
         self.worker = ProcessWorker(plan)
         self.worker.output.connect(self._simulation_output)
         self.worker.step_started.connect(self._simulation_step)
         self.worker.completed.connect(lambda success, message, value=plan: self._simulation_done(success, message, value.waveform_path))
         self.worker.start()
 
+    def _start_free_engine_setup(self) -> None:
+        script = Path(__file__).resolve().parent.parent / "tools" / "setup_open_source_uvm.ps1"
+        if not script.exists():
+            QMessageBox.warning(self, "Setup unavailable", "The free engine installer was not found.")
+            return
+        try:
+            subprocess.Popen(
+                [
+                    "powershell.exe",
+                    "-NoExit",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    str(script),
+                    "-ProjectRoot",
+                    str(self.project_root),
+                ],
+                cwd=self.project_root,
+            )
+        except OSError as error:
+            QMessageBox.warning(self, "Setup unavailable", str(error))
+            return
+        QMessageBox.information(
+            self,
+            "Setup started",
+            "The free engine is installing. When the terminal says Complete, press Run again.",
+        )
+
     def stop_test(self) -> None:
         if self.worker:
             self.worker.stop()
-            self.status_message.setText("Stopping simulation…")
+            self.status_message.setText("Stopping...")
 
     def _simulation_output(self, text: str) -> None:
         self.console.moveCursor(QTextCursor.MoveOperation.End)
         self.console.insertPlainText(text)
         self.console.moveCursor(QTextCursor.MoveOperation.End)
-        self.uvm_log.append(text)
-        self._parse_problem(text)
-        lowered = text.lower()
-        for index, phase in enumerate(self.phase_names):
-            if phase.lower() in lowered:
-                self._set_phase(index)
-        if "starting" in lowered and "transaction" in lowered:
-            self._set_phase(4)
 
     def _simulation_step(self, step: str) -> None:
         self.status_message.setText(step)
-        if "Run" in step or "Demo" in step:
-            self._set_phase(4)
 
     def _simulation_done(self, success: bool, message: str, waveform_path: Path) -> None:
         self.action_run.setEnabled(True)
-        self.action_debug.setEnabled(True)
-        self.action_rerun.setEnabled(True)
         self.action_stop.setEnabled(False)
-        self.status_message.setText(("✓  " if success else "✕  ") + message)
-        self.debug_panel.finish_run(success, time.monotonic() - self._run_started, self.problems.rowCount())
-        if success:
-            self._finish_phases()
+        self.status_message.setText(("Passed - " if success else "Failed - ") + message)
         if waveform_path.exists():
             try:
                 self._load_vcd(waveform_path)
             except (OSError, ValueError) as error:
                 self._append_console(f"\nWaveform could not be loaded: {error}\n")
         if not success:
-            self.bottom_tabs.setCurrentIndex(2 if self.problems.rowCount() else 0)
-            if self.problems.rowCount():
-                self._open_problem(0)
+            self.bottom_tabs.setCurrentIndex(0)
         self.worker = None
 
     def _append_console(self, text: str) -> None:
@@ -1045,8 +983,8 @@ class MainWindow(QMainWindow):
 
     def _load_vcd(self, path: Path) -> None:
         self.waveform.load_file(path)
-        self.bottom_tabs.setCurrentIndex(4)
-        self.bottom_tabs.setTabText(4, f"Waveform · {path.name}")
+        self.bottom_tabs.setCurrentIndex(1)
+        self.bottom_tabs.setTabText(1, f"Waveform - {path.name}")
 
     def open_solver_log(self) -> None:
         path = self.project_root / ".svstudio" / "solver.log"
@@ -1099,7 +1037,40 @@ class MainWindow(QMainWindow):
             starter = root / "rtl" / "design.sv"
             if not starter.exists():
                 starter.write_text(
-                    "`timescale 1ns/1ps\n\nmodule design(input logic clk, input logic rst_n);\nendmodule\n",
+                    """`timescale 1ns/1ps
+
+module simple_adder (
+    input  logic [7:0] a,
+    input  logic [7:0] b,
+    output logic [7:0] result
+);
+    assign result = a + b;
+endmodule
+""",
+                    encoding="utf-8",
+                )
+            top = root / "tb" / "tb_top.sv"
+            if not top.exists():
+                top.write_text(
+                    """`timescale 1ns/1ps
+
+module tb_top;
+    logic [7:0] a;
+    logic [7:0] b;
+    logic [7:0] result;
+
+    simple_adder dut (.*);
+
+    initial begin
+        $dumpfile(".svstudio/waves.vcd");
+        $dumpvars(0, tb_top);
+        a = 8'd1;  b = 8'd2;  #10;
+        a = 8'd10; b = 8'd20; #10;
+        a = 8'hff; b = 8'd1;  #10;
+        $finish;
+    end
+endmodule
+""",
                     encoding="utf-8",
                 )
         except OSError as error:
@@ -1113,9 +1084,7 @@ class MainWindow(QMainWindow):
         self.editors.clear()
         self.project_root = root.resolve()
         self.config = ProjectConfig.load(self.project_root)
-        self.setWindowTitle(f"SV Studio — {self.config.name}")
-        index = self.engine_combo.findData(self.config.simulator)
-        self.engine_combo.setCurrentIndex(max(0, index))
+        self.setWindowTitle(f"SV Studio - {self.config.name}")
         self.refresh_project_tree()
         self._discover_tests()
         self._update_engine_status()
@@ -1138,6 +1107,6 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             "About SV Studio",
-            "SV Studio 0.2.0\n\nA lightweight, local SystemVerilog and UVM learning IDE.\n"
+            "SV Studio 0.3.0\n\nA minimal, local SystemVerilog and UVM IDE.\n"
             "Designed for the free Verilator + CHIPS Alliance UVM toolchain.",
         )

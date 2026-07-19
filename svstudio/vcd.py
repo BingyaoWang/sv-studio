@@ -25,7 +25,10 @@ class VCDData:
 def parse_vcd(path: Path) -> VCDData:
     data = VCDData()
     scopes: list[str] = []
-    by_code: dict[str, VCDSignal] = {}
+    # VCD permits several hierarchical signal names to share one identifier
+    # code (for example an interface net and the DUT port connected to it).
+    # Keep every alias so each name renders the same value changes.
+    by_code: dict[str, list[VCDSignal]] = {}
     current_time = 0
     in_timescale = False
     timescale_parts: list[str] = []
@@ -72,7 +75,7 @@ def parse_vcd(path: Path) -> VCDData:
                     full_name = ".".join([*scopes, reference])
                     signal = VCDSignal(full_name, code, width)
                     data.signals.append(signal)
-                    by_code[code] = signal
+                    by_code.setdefault(code, []).append(signal)
                 continue
             if line.startswith("#"):
                 try:
@@ -82,15 +85,13 @@ def parse_vcd(path: Path) -> VCDData:
                     pass
                 continue
             if line[0] in "01xXzZ":
-                signal = by_code.get(line[1:])
-                if signal:
+                for signal in by_code.get(line[1:], []):
                     signal.changes.append((current_time, line[0].lower()))
                 continue
             if line[0] in "bBrR":
                 parts = line.split()
                 if len(parts) == 2:
-                    signal = by_code.get(parts[1])
-                    if signal:
+                    for signal in by_code.get(parts[1], []):
                         signal.changes.append((current_time, parts[0][1:].lower()))
 
     return data
