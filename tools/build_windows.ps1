@@ -5,16 +5,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+$VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $DistRoot = Join-Path $ProjectRoot "dist"
 $WorkRoot = Join-Path $ProjectRoot "build\pyinstaller"
 $SpecRoot = Join-Path $ProjectRoot "build"
 $PackageDir = Join-Path $DistRoot "SVStudio"
 $Archive = Join-Path $DistRoot "SVStudio-Windows-x64-v$Version.zip"
 
-if (-not (Test-Path $Python)) {
-    Write-Host "Run .\run.ps1 once before packaging." -ForegroundColor Red
-    exit 1
+if (Test-Path $VenvPython) {
+    $Python = $VenvPython
+} else {
+    $PythonCommand = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $PythonCommand) {
+        Write-Host "Python 3.10 or newer is required for packaging." -ForegroundColor Red
+        exit 1
+    }
+    $Python = $PythonCommand.Source
 }
 
 if (-not $SkipInstall) {
