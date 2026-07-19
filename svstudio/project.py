@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -37,8 +37,19 @@ class ProjectConfig:
         return cls(**{key: value for key, value in data.items() if key in allowed})
 
     def save(self, root: Path) -> None:
+        # Keep the project file intentionally small. Toolchain selection,
+        # random seeds, verbosity, and command-line details are automatic and
+        # must not become user-facing configuration.
+        project_data = {
+            "name": self.name,
+            "top": self.top,
+            "test": self.test,
+            "sources": self.sources,
+            "include_dirs": self.include_dirs,
+            "waveform": self.waveform,
+        }
         (root / PROJECT_FILE).write_text(
-            json.dumps(asdict(self), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+            json.dumps(project_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
 
     def source_files(self, root: Path) -> list[Path]:

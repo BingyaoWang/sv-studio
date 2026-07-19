@@ -22,14 +22,21 @@ if (-not $Wsl) {
     exit 1
 }
 
-$WslProject = (& wsl.exe -d Ubuntu -- wslpath -a $ProjectRoot).Trim()
-if (-not $WslProject) {
-    Write-Host "Could not translate the project folder into WSL." -ForegroundColor Red
+# Convert the resolved Windows path ourselves. Passing a path containing
+# backslashes through `wsl.exe -- wslpath` is not reliable on every WSL build:
+# some versions treat the backslashes as shell escapes before wslpath sees them.
+if ($ProjectRoot -notmatch '^([A-Za-z]):\\(.*)$') {
+    Write-Host "The project must be on a Windows drive that WSL mounts under /mnt." -ForegroundColor Red
     exit 1
 }
+$DriveLetter = $Matches[1].ToLowerInvariant()
+$PathTail = $Matches[2].Replace('\', '/')
+$WslProject = "/mnt/$DriveLetter/$PathTail"
 
 Write-Host "Installing build prerequisites in Ubuntu..." -ForegroundColor Yellow
-& wsl.exe -d Ubuntu -- bash -lc "sudo apt-get update && sudo apt-get install -y git autoconf flex bison help2man perl make g++ ccache libfl-dev zlib1g-dev z3"
+# WSL can launch a command as root directly. This avoids an invisible sudo
+# password prompt when setup is started from the desktop application.
+& wsl.exe -d Ubuntu -u root -- bash -lc "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git autoconf flex bison help2man perl make g++ ccache libfl-dev zlib1g-dev z3"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Building current stable Verilator locally (this can take several minutes)..." -ForegroundColor Yellow

@@ -2,11 +2,14 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.artifacts/
 .svstudio/
 build/
 dist/
 *.vcd
 *.fst
 *.wlf
+coverage.dat
+tr_db.log
 work/
 obj_dir/

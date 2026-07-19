@@ -1,6 +1,6 @@
-from __future__ import annotations
-
+import hashlib
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -41,6 +41,7 @@ class SimulationPlan:
     engine: Toolchain
     steps: list[CommandStep]
     waveform_path: Path
+    uses_uvm: bool = False
 
 
 def _run_probe(command: list[str], timeout: float = 3.0) -> tuple[bool, str]:
@@ -69,7 +70,7 @@ def detect_toolchains() -> list[Toolchain]:
             "Verilator (native)",
             native_verilator or "",
             bool(native_verilator),
-            "Open-source SystemVerilog compiler" + (" · Z3 ready" if shutil.which("z3") else " · Z3 missing"),
+            "Open-source SystemVerilog compiler" + (" - Z3 ready" if shutil.which("z3") else " - Z3 missing"),
             bool(shutil.which("z3")),
         )
     )
@@ -83,7 +84,10 @@ def detect_toolchains() -> list[Toolchain]:
             "command -v verilator >/dev/null && verilator --version; "
             "command -v z3 >/dev/null && z3 --version || echo 'Z3 missing'"
         )
-        wsl_ready, version = _run_probe([wsl, "-d", "Ubuntu", "--", "bash", "-lc", probe], 6)
+        # A cold WSL boot can exceed six seconds on Windows even when the
+        # installed engine is healthy. Wait long enough to avoid a false
+        # "setup required" result on the first click of Run.
+        wsl_ready, version = _run_probe([wsl, "-d", "Ubuntu", "--", "bash", "-lc", probe], 20)
     wsl_solver_ready = "Z3 version" in version
     chains.append(
         Toolchain(
@@ -91,7 +95,7 @@ def detect_toolchains() -> list[Toolchain]:
             "Verilator + UVM (WSL)",
             wsl or "",
             wsl_ready,
-            " · ".join(version.splitlines()[-2:]) if version else ("WSL detected; setup required" if wsl else "WSL not found"),
+            " - ".join(version.splitlines()[-2:]) if version else ("WSL detected; setup required" if wsl else "WSL not found"),
             wsl_solver_ready,
         )
     )
@@ -124,10 +128,15 @@ def choose_toolchain(preference: str = "auto") -> Toolchain:
     by_key = {chain.key: chain for chain in chains}
     if preference != "auto":
         return by_key.get(preference, by_key["demo"])
-    for key in ("wsl-verilator", "verilator", "iverilog"):
+    for key in ("wsl-verilator", "verilator"):
         if by_key[key].ready:
             return by_key[key]
-    return by_key["demo"]
+    return Toolchain(
+        "unavailable",
+        "Free Verilator engine",
+        ready=False,
+        note="The one-time free engine setup has not completed yet.",
+    )
 
 
 def windows_to_wsl(path: Path) -> str:
@@ -140,9 +149,7 @@ def windows_to_wsl(path: Path) -> str:
 
 
 def _uvm_source(config: ProjectConfig, root: Path) -> Path:
-    configured = config.resolved_uvm_home(root)
     candidates = [
-        configured,
         root / "tools" / "uvm-verilator",
         root / "tools" / "uvm",
     ]
@@ -154,20 +161,55 @@ def _uvm_source(config: ProjectConfig, root: Path) -> Path:
         if (candidate / "uvm.sv").exists():
             return candidate
     raise RunnerError(
-        "The open-source UVM library is not installed yet. Open Toolchains and run "
-        "the free Verilator + UVM setup first."
+        "The free UVM library is not installed in this project yet. Run the one-time "
+        "SV Studio engine setup, then press Run again."
     )
 
 
-def _verilator_arguments(config: ProjectConfig, root: Path, wsl: bool) -> tuple[list[str], Path, str]:
+def project_uses_uvm(config: ProjectConfig, root: Path) -> bool:
+    """Detect UVM from project source without exposing a mode switch to users."""
+    marker = re.compile(r"\b(?:uvm_pkg|uvm_component|uvm_test|run_test)\b|`uvm_")
+    candidates = set(config.source_files(root))
+    for include_dir in config.include_dirs:
+        directory = root / include_dir
+        if directory.is_dir():
+            candidates.update(directory.rglob("*.sv"))
+            candidates.update(directory.rglob("*.svh"))
+    for source in candidates:
+        try:
+            if marker.search(source.read_text(encoding="utf-8", errors="ignore")):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _verilator_arguments(
+    config: ProjectConfig,
+    root: Path,
+    wsl: bool,
+    uses_uvm: bool,
+) -> tuple[list[str], Path, str]:
     sources = config.source_files(root)
     if not sources:
         raise RunnerError("No SystemVerilog source files match this project's source patterns.")
-    uvm_src = _uvm_source(config, root)
+    uvm_src = _uvm_source(config, root) if uses_uvm else None
     build_dir = root / ".svstudio" / "obj_dir"
     build_dir.mkdir(parents=True, exist_ok=True)
 
     convert = windows_to_wsl if wsl else lambda path: str(path.resolve())
+    if wsl:
+        # Building the generated UVM C++ directly under /mnt/c is extremely
+        # slow because large precompiled headers cross the Windows/WSL file
+        # boundary. Keep only reproducible intermediates in WSL-local storage;
+        # the simulation still runs from the project root, so VCD output stays
+        # alongside the Windows project.
+        build_key = hashlib.sha256(str(root.resolve()).encode("utf-8")).hexdigest()[:12]
+        # /var/tmp is Linux-native and survives WSL instance shutdowns. Plain
+        # /tmp may be cleared between two clicks of Run in the desktop app.
+        engine_build_dir = f"/var/tmp/svstudio-{build_key}/obj_dir"
+    else:
+        engine_build_dir = convert(build_dir)
     args = [
         "--cc",
         "--exe",
@@ -177,7 +219,7 @@ def _verilator_arguments(config: ProjectConfig, root: Path, wsl: bool) -> tuple[
         "--trace-structs",
         "--coverage",
         "-Mdir",
-        convert(build_dir),
+        engine_build_dir,
         "--prefix",
         "svsim",
         "-o",
@@ -188,7 +230,6 @@ def _verilator_arguments(config: ProjectConfig, root: Path, wsl: bool) -> tuple[
         "1ns/1ps",
         "--error-limit",
         "100",
-        "-DUVM_NO_DPI",
         "-Wno-fatal",
         "-Wno-lint",
         "-Wno-style",
@@ -196,63 +237,72 @@ def _verilator_arguments(config: ProjectConfig, root: Path, wsl: bool) -> tuple[
         "-Wno-IGNOREDRETURN",
         "-Wno-ZERODLY",
     ]
+    if uses_uvm:
+        args.append("-DUVM_NO_DPI")
     for define in config.defines:
         args.append(f"-D{define}")
-    include_dirs = [uvm_src, *(root / item for item in config.include_dirs)]
+    include_dirs = [*(root / item for item in config.include_dirs)]
+    if uvm_src:
+        include_dirs.insert(0, uvm_src)
     for include_dir in include_dirs:
         args.append(f"+incdir+{convert(include_dir)}")
-    args.append(convert(uvm_src / "uvm.sv"))
+    if uvm_src:
+        args.append(convert(uvm_src / "uvm.sv"))
     args.extend(convert(source) for source in sources)
-    return args, build_dir, convert(build_dir)
+    return args, build_dir, engine_build_dir
 
 
 def build_plan(config: ProjectConfig, root: Path, preference: str | None = None) -> SimulationPlan:
-    engine = choose_toolchain(preference or config.simulator)
+    # There is intentionally no user-facing backend choice. Always use the
+    # strongest free local engine available on this machine.
+    engine = choose_toolchain("auto")
+    uses_uvm = project_uses_uvm(config, root)
     waveform = root / config.waveform
     waveform.parent.mkdir(parents=True, exist_ok=True)
-    plusargs = [
-        f"+UVM_TESTNAME={config.test}",
-        *config.plusargs,
-    ]
-
-    if engine.key == "demo":
-        return SimulationPlan(engine, [], waveform)
+    plusargs = [f"+UVM_TESTNAME={config.test}", *config.plusargs] if uses_uvm else []
 
     if not engine.ready:
-        raise RunnerError(f"{engine.label} is not ready. Open Toolchains to finish setup.")
+        raise RunnerError("The free local engine is not ready yet.")
 
     if engine.key == "wsl-verilator":
-        args, build_dir, wsl_build = _verilator_arguments(config, root, True)
+        args, build_dir, wsl_build = _verilator_arguments(config, root, True, uses_uvm)
         wsl_root = windows_to_wsl(root)
         prefix = (
             'export PATH="$HOME/.local/sv-studio/verilator/bin:$PATH"; '
             f"cd {shlex.quote(wsl_root)}; "
         )
-        compile_line = prefix + "verilator " + " ".join(shlex.quote(arg) for arg in args)
+        compile_line = (
+            prefix
+            + f"mkdir -p {shlex.quote(wsl_build)}; "
+            + "verilator "
+            + " ".join(shlex.quote(arg) for arg in args)
+        )
         make_line = prefix + f"make -j$(nproc) -C {shlex.quote(wsl_build)} -f svsim.mk"
         run_line = prefix + shlex.quote(f"{wsl_build}/svsim") + " " + " ".join(
             shlex.quote(arg) for arg in plusargs
         )
         program = engine.executable
         common = ["-d", "Ubuntu", "--", "bash", "-lc"]
+        compile_label = "Check UVM project" if uses_uvm else "Check SystemVerilog"
+        run_label = "Run UVM test" if uses_uvm else "Run simulation"
         steps = [
-            CommandStep("Compile SystemVerilog + UVM", program, [*common, compile_line], root),
-            CommandStep("Build simulation", program, [*common, make_line], root),
-            CommandStep("Run UVM test", program, [*common, run_line], root),
+            CommandStep(compile_label, program, [*common, compile_line], root),
+            CommandStep("Build simulator", program, [*common, make_line], root),
+            CommandStep(run_label, program, [*common, run_line], root),
         ]
-        return SimulationPlan(engine, steps, waveform)
+        return SimulationPlan(engine, steps, waveform, uses_uvm)
 
     if engine.key == "verilator":
-        args, build_dir, _ = _verilator_arguments(config, root, False)
+        args, build_dir, _ = _verilator_arguments(config, root, False, uses_uvm)
         make = shutil.which("make") or shutil.which("mingw32-make")
         if not make:
             raise RunnerError("Verilator was found, but Make is missing. The WSL setup is recommended on Windows.")
         steps = [
-            CommandStep("Compile SystemVerilog + UVM", engine.executable, args, root),
-            CommandStep("Build simulation", make, ["-j", "-C", str(build_dir), "-f", "svsim.mk"], root),
-            CommandStep("Run UVM test", str(build_dir / "svsim"), plusargs, root),
+            CommandStep("Check UVM project" if uses_uvm else "Check SystemVerilog", engine.executable, args, root),
+            CommandStep("Build simulator", make, ["-j", "-C", str(build_dir), "-f", "svsim.mk"], root),
+            CommandStep("Run UVM test" if uses_uvm else "Run simulation", str(build_dir / "svsim"), plusargs, root),
         ]
-        return SimulationPlan(engine, steps, waveform)
+        return SimulationPlan(engine, steps, waveform, uses_uvm)
 
     if engine.key == "iverilog":
         if any("uvm" in source.name.lower() for source in config.source_files(root)):
@@ -287,16 +337,13 @@ class ProcessWorker(QThread):
             self._process.terminate()
 
     def run(self) -> None:
-        if self.plan.engine.key == "demo":
-            self._run_demo()
-            return
-        for step in self.plan.steps:
+        step_count = len(self.plan.steps)
+        for step_number, step in enumerate(self.plan.steps, start=1):
             if self._stop_requested:
                 self.completed.emit(False, "Simulation stopped")
                 return
             self.step_started.emit(step.label)
-            self.output.emit(f"\n› {step.label}\n")
-            self.output.emit("$ " + subprocess.list2cmdline([step.program, *step.args]) + "\n")
+            self.output.emit(f"\n[{step_number}/{step_count}] {step.label}...\n")
             try:
                 self._process = subprocess.Popen(
                     [step.program, *step.args],
@@ -311,7 +358,10 @@ class ProcessWorker(QThread):
                 )
                 assert self._process.stdout is not None
                 for line in self._process.stdout:
-                    self.output.emit(line)
+                    cleaned = self._clean_output_line(line)
+                    cleaned = self._shorten_project_path(cleaned)
+                    if cleaned and self._should_show_line(step, cleaned):
+                        self.output.emit(cleaned)
                 return_code = self._process.wait()
             except OSError as error:
                 self.completed.emit(False, str(error))
@@ -319,7 +369,62 @@ class ProcessWorker(QThread):
             if return_code != 0:
                 self.completed.emit(False, f"{step.label} failed with exit code {return_code}")
                 return
-        self.completed.emit(True, "UVM test completed")
+            self.output.emit("Done.\n")
+        self.completed.emit(True, "Test passed" if self.plan.uses_uvm else "Simulation completed")
+
+    @staticmethod
+    def _clean_output_line(line: str) -> str:
+        line = line.replace("\x00", "")
+        if line.lstrip().lower().startswith("wsl:"):
+            return ""
+        if "\ufffd" in line or any(ord(character) < 32 and character not in "\t\r\n" for character in line):
+            return ""
+        return line
+
+    def _shorten_project_path(self, line: str) -> str:
+        root = self.plan.waveform_path.parent.parent
+        prefixes = (root.resolve().as_posix(), windows_to_wsl(root))
+        for prefix in prefixes:
+            line = line.replace(prefix.rstrip("/") + "/", "")
+        return line
+
+    def _should_show_line(self, step: CommandStep, line: str) -> bool:
+        if step.label.startswith("Run"):
+            if self.plan.uses_uvm:
+                stripped = line.strip()
+                if not stripped:
+                    return False
+                if stripped.startswith(("UVM_ERROR", "UVM_FATAL")):
+                    return True
+                if "tools/uvm-verilator/" in line:
+                    return False
+                boilerplate = (
+                    "IMPORTANT RELEASE NOTES",
+                    "This implementation of the UVM Library",
+                    "standard.  See the DEVIATIONS",
+                    "for more details.",
+                    "Accellera:1800.2",
+                    "All copyright owners",
+                    "All Rights Reserved",
+                    "Specify +UVM_NO_RELNOTES",
+                    "** Report counts by id",
+                )
+                if any(marker in stripped for marker in boilerplate):
+                    return False
+                if stripped.startswith(("-----", "[")):
+                    return False
+            return True
+        lowered = line.lower()
+        useful = (
+            "%error",
+            "%warning",
+            " error:",
+            " fatal:",
+            "undefined reference",
+            "no such file",
+            "exiting due to",
+        )
+        return any(marker in lowered for marker in useful)
 
     def _run_demo(self) -> None:
         self.step_started.emit("Learning Demo Engine")

@@ -14,7 +14,11 @@ def test_project_round_trip(tmp_path: Path):
     assert loaded.name == "Lab"
     assert loaded.top == "tb"
     assert [path.name for path in loaded.source_files(tmp_path)] == ["dut.sv"]
-    assert json.loads((tmp_path / ".svstudio.json").read_text(encoding="utf-8"))["name"] == "Lab"
+    saved = json.loads((tmp_path / ".svstudio.json").read_text(encoding="utf-8"))
+    assert saved["name"] == "Lab"
+    assert "simulator" not in saved
+    assert "uvm_home" not in saved
+    assert "plusargs" not in saved
 
 
 def test_example_project_sources_are_explicit():
