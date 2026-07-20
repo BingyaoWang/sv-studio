@@ -9,6 +9,9 @@ workflow is intentionally limited to five things:
 - Console
 - Waveform
 
+  <img width="1917" height="1020" alt="SVstudio" src="https://github.com/user-attachments/assets/735a2876-ff9a-4d7d-b7fa-5bbab7d83001" />
+
+
 There is no simulator selector, UVM path selector, verbosity selector, seed
 form, or custom command form. SV Studio detects whether the project is plain
 SystemVerilog or UVM and runs the best free local flow automatically.
