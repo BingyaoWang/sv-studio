@@ -41,9 +41,14 @@ The default engine is fully open source and needs no commercial license:
 If the engine or project-local UVM library is missing, the first Run offers the
 one-time free setup. There are no toolchain settings to manage afterward.
 
-## Start
+## Install or start
 
-Use the portable Windows package, or run from source:
+The recommended Windows download is `SVStudio-Setup-x64-v0.4.0.exe`. It installs
+SV Studio for the current user without an administrator prompt, adds Start menu
+and desktop shortcuts, and includes a normal Windows uninstaller.
+
+The portable ZIP remains available for users who do not want to install. You
+can also run from source:
 
 ```powershell
 .\run.ps1
@@ -79,12 +84,16 @@ use one top-level testbench that includes the class files in compilation order.
 | `Ctrl+Alt+S` | Save all |
 | `Ctrl+F` | Find |
 
-## Build the Windows package
+## Build the Windows packages
 
 ```powershell
-.\tools\build_windows.ps1 -Version "0.3.0"
+.\tools\build_windows.ps1 -Version "0.4.0"
 ```
 
-The portable archive is written to
-`dist/SVStudio-Windows-x64-v0.3.0.zip`. GitHub Actions runs the tests and builds
-the package on every push; version tags publish the archive as a GitHub Release.
+This requires Python and Inno Setup 6. It creates:
+
+- `dist/SVStudio-Setup-x64-v0.4.0.exe` (recommended installer)
+- `dist/SVStudio-Windows-x64-v0.4.0.zip` (portable package)
+
+GitHub Actions runs the tests and builds both packages on every push; version
+tags publish both files as a GitHub Release.

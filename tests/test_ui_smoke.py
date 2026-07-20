@@ -4,9 +4,11 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from svstudio.app import MainWindow
+from svstudio.resources import application_icon_path
 from svstudio.vcd import write_demo_vcd
 
 
@@ -22,6 +24,8 @@ def test_main_window_is_minimal_and_loads_waveform(tmp_path: Path):
     assert window.bottom_tabs.tabText(1) == "Waveform"
     assert not hasattr(window, "engine_combo")
     assert not hasattr(window, "test_combo")
+    assert application_icon_path().is_file()
+    assert not QIcon(str(application_icon_path())).isNull()
 
     waveform = project / ".svstudio" / "test.vcd"
     write_demo_vcd(waveform)

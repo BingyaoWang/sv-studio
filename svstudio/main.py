@@ -5,11 +5,23 @@ import shutil
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor, QIcon, QPalette
 from PySide6.QtWidgets import QApplication
 
 from .app import MainWindow
 from .project import PROJECT_FILE
+from .resources import application_icon_path
+
+
+def configure_windows_app_id() -> None:
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("SVStudio.SVStudio")
+    except (AttributeError, OSError):
+        pass
 
 
 def default_project() -> Path:
@@ -29,10 +41,15 @@ def default_project() -> Path:
 
 
 def main() -> int:
+    configure_windows_app_id()
     QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication(sys.argv)
     app.setApplicationName("SV Studio")
+    app.setApplicationDisplayName("SV Studio")
     app.setOrganizationName("SVStudio")
+    icon_path = application_icon_path()
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
     app.setStyle("Fusion")
     palette = QPalette()
     palette.setColor(QPalette.ColorRole.Window, QColor("#111418"))

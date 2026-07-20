@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .artifacts/
+assets/branding/*-chroma.png
 .svstudio/
 build/
 dist/

@@ -1107,6 +1107,6 @@ endmodule
         QMessageBox.about(
             self,
             "About SV Studio",
-            "SV Studio 0.3.0\n\nA minimal, local SystemVerilog and UVM IDE.\n"
+            "SV Studio 0.4.0\n\nA minimal, local SystemVerilog and UVM IDE.\n"
             "Designed for the free Verilator + CHIPS Alliance UVM toolchain.",
         )
